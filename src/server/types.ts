@@ -9,6 +9,8 @@ export type MiddlewareFunctionResponse = (c: Context, next: () => Promise<void>)
     message: string;
 }, 400 | 408 | 500> | undefined>
 
+export type { Context };
+
 export interface ServerConfig {
     port: number;
     hostname: string;
