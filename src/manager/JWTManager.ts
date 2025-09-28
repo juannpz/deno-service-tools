@@ -1,5 +1,5 @@
 import { create, type Header, verify, type Payload } from '../../vendor/deno.land/x/djwt@v3.0.2/mod.ts';
-import { buildResponse, type GenericResponse } from '../utils/http.ts';
+import { ResUtil, type Result } from '../util/result.util.ts';
 
 export interface IGenerateKeyConfig {
     format: Exclude<KeyFormat, "jwk">;
@@ -18,56 +18,49 @@ export class JWTManager {
         JWTManager.signature = signature;
     }
 
-    public static async verify<T extends Payload>(token: string, keyGenerationConfig: IGenerateKeyConfig): Promise<GenericResponse<T>> {
+    public static async verify<T extends Payload>(token: string, keyGenerationConfig: IGenerateKeyConfig): Promise<Result<T>> {
         if (!JWTManager.signature) {
-            return buildResponse({
-                success: false,
-                error: new Error('Missing JWT Manager signature. Call init() first')
-            });
+            return ResUtil.Fail('Missing JWT Manager signature. Call init() first');
         }
 
         try {
             const generateKeyResult = await JWTManager.generateKey(keyGenerationConfig);
 
-            if (!generateKeyResult.success)
-                return generateKeyResult;
+            if (!generateKeyResult.ok) {
+                return ResUtil.Fail(generateKeyResult.message, generateKeyResult.error);
+            }
 
-            const decodedToken = await verify<T>(token.replaceAll('Bearer ', ''), generateKeyResult.data);
+            const decodedToken = await verify<T>(token.replaceAll('Bearer ', ''), generateKeyResult.value);
 
-            return buildResponse({ success: true, data: decodedToken });
+            return ResUtil.Succeed(decodedToken);
         } catch (error) {
-            return buildResponse({ success: false, error });
+            return ResUtil.Fail('Failed to verify token', error);
         }
     }
 
-    public static async generate<T extends Payload>(configHeader: Header, payload: T, keyGenerationConfig: IGenerateKeyConfig): Promise<GenericResponse<string>> {
+    public static async generate<T extends Payload>(configHeader: Header, payload: T, keyGenerationConfig: IGenerateKeyConfig): Promise<Result<string>> {
         if (!JWTManager.signature) {
-            return buildResponse({
-                success: false,
-                error: new Error('Missing JWT Manager signature. Call init() first')
-            });
+            return ResUtil.Fail('Missing JWT Manager signature. Call init() first');
         }
 
         try {
             const generateKeyResult = await JWTManager.generateKey(keyGenerationConfig);
 
-            if (!generateKeyResult.success)
-                return generateKeyResult;
+            if (!generateKeyResult.ok) {
+                return ResUtil.Fail(generateKeyResult.message, generateKeyResult.error);
+            }
 
-            const jwt = await create(configHeader, payload, generateKeyResult.data)
+            const jwt = await create(configHeader, payload, generateKeyResult.value)
 
-            return buildResponse({ success: true, data: jwt });
+            return ResUtil.Succeed(jwt);
         } catch (error) {
-            return buildResponse({ success: false, error });
+            return ResUtil.Fail('Failed to generate token', error);
         }
     }
 
-    private static async generateKey(config: IGenerateKeyConfig): Promise<GenericResponse<CryptoKey>> {
+    private static async generateKey(config: IGenerateKeyConfig): Promise<Result<CryptoKey>> {
         if (!JWTManager.signature) {
-            return buildResponse({
-                success: false,
-                error: new Error('Missing JWT Manager signature. Call init() first')
-            });
+            return ResUtil.Fail('Missing JWT Manager signature. Call init() first');
         }
 
         try {
@@ -81,9 +74,9 @@ export class JWTManager {
                 config.keyUsages ?? ["sign", "verify"]
             );
 
-            return buildResponse({ success: true, data: key });
+            return ResUtil.Succeed(key);
         } catch (error) {
-            return buildResponse({ success: false, error });
+            return ResUtil.Fail('Failed to generate key', error);
         }
     }
 }
