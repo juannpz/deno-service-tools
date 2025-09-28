@@ -2,8 +2,16 @@
 
 import type { ContentfulStatusCode, Hono } from "../../deps.ts";
 import type { Context } from "../../deps.ts";
-import { isErrorWithStatus } from '../utils/http.ts';
 import type { ParamConfig, RouteBuilder, MiddlewareFunction, ContextVariables } from "./types.ts";
+
+function isErrorWithStatus(error: unknown): error is { status: number } {
+    return (
+        typeof error === "object" &&
+        error !== null &&
+        "status" in error &&
+        typeof (error as { status: unknown }).status === "number"
+    );
+}
 
 export class Route<
     P extends Record<string, unknown> = Record<string, string>,
@@ -234,10 +242,12 @@ export class Route<
                         });
                     } catch (error) {
                         console.error("Route handler error:", error);
-                        return c.json(
-                            { error: error instanceof Error ? error.message : "Internal server error" },
-                            (isErrorWithStatus(error) ? error.status : 500) as ContentfulStatusCode
-                        );
+                        if (error instanceof Response) {
+                            return error;
+                        }
+                        const status = isErrorWithStatus(error) ? error.status : 500;
+                        const message = error instanceof Error ? error.message : "Internal server error";
+                        return c.json({ error: message }, status as ContentfulStatusCode);
                     }
                 };
 
