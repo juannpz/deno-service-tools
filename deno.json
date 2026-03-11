@@ -21,7 +21,7 @@
         "test": "deno test",
         "check": "deno check mod.ts",
         "build:npm": "deno run -A build_npm.ts",
-        "publish:jsr": "deno publish",
+        "publish:jsr": "deno publish --no-check",
         "publish:npm": "cd npm && npm publish"
     },
     "imports": {
