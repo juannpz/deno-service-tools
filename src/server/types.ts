@@ -65,3 +65,8 @@ export interface RouteBuilder <
     }
 
 export type ContextVariables = Record<string, unknown>;
+
+export type ValidationResult = {
+    valid: boolean;
+    message?: string;
+};

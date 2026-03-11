@@ -2,7 +2,7 @@
 
 import type { ContentfulStatusCode, Hono } from "../../deps.ts";
 import type { Context } from "../../deps.ts";
-import type { ParamConfig, RouteBuilder, MiddlewareFunction, ContextVariables } from "./types.ts";
+import type { ParamConfig, RouteBuilder, MiddlewareFunction, ContextVariables, ValidationResult } from "./types.ts";
 
 function isErrorWithStatus(error: unknown): error is { status: number } {
     return (
@@ -30,7 +30,7 @@ export class Route<
             };
             private _middlewares: MiddlewareFunction[] = [];
             private _description = "";
-            private _bodyValidator?: (body: unknown) => boolean;
+            private _bodyValidator?: (body: unknown) => ValidationResult;
             private _tags: string[] = [];
 
             constructor(path: string) {
@@ -117,8 +117,8 @@ export class Route<
                 return this;
             }
 
-    public validateBody<T>(validator: (body: T) => boolean): this {
-                this._bodyValidator = validator as (body: unknown) => boolean;
+    public validateBody<T>(validator: (body: T) => ValidationResult): this {
+                this._bodyValidator = validator as (body: unknown) => ValidationResult;
                 return this; 
             }
 
@@ -202,11 +202,17 @@ export class Route<
                         const contentType = c.req.header('content-type');
 
                         if (contentLength && contentLength !== '0' && contentType?.includes('application/json')) {
-                            body = await c.req.json();
-                            if (this._bodyValidator && !this._bodyValidator(body)) {
-                                return c.json({ error: "Invalid request body format" }, 400 as ContentfulStatusCode);
-                            }
-                        }
+    						body = await c.req.json();
+
+							if (this._bodyValidator) {
+								const validation = this._bodyValidator(body);
+								if (!validation.valid) {
+									// Usamos el mensaje personalizado si existe, o un fallback genérico
+									const errorMessage = validation.message || "Invalid request body format";
+									return c.json({ error: errorMessage }, 400 as ContentfulStatusCode);
+								}
+							}
+						}
                     } catch (_e) {
                         console.log(_e);
                         
