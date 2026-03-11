@@ -55,13 +55,27 @@ export async function safeFetch<T>(fetchPromise: Promise<Response>): Promise<Res
     try {
         const response = await fetchPromise;
 
-        // If the response is not 'ok' (status is not in the 2xx range), it's a failure.
         if (!response.ok) {
-            // The 'error' is the full Response object to allow for later inspection.
-            return ResUtil.Fail(`Request failed with status ${response.status}`, response);
+            let errorMessage = `Request failed with status ${response.status}`;
+
+            try {
+                const clonedResponse = response.clone();
+                const errorBody = await clonedResponse.json();
+
+                if (errorBody && typeof errorBody === 'object') {
+                    if ('error' in errorBody && typeof errorBody.error === 'string') {
+                        errorMessage = errorBody.error;
+                    } else if ('message' in errorBody && typeof errorBody.message === 'string') {
+                        errorMessage = errorBody.message;
+                    }
+                }
+            } catch (_) {
+                // ignored.
+            }
+
+            return ResUtil.Fail(errorMessage, response);
         }
 
-        // Try to parse the JSON. If it fails, it's another type of error.
         try {
             const data = await response.json() as T;
             return ResUtil.Succeed(data);
@@ -70,7 +84,6 @@ export async function safeFetch<T>(fetchPromise: Promise<Response>): Promise<Res
         }
 
     } catch (networkError) {
-        // Catches network errors (e.g., server down, no connection).
         return ResUtil.Fail("A network or unexpected error occurred", networkError);
     }
 }
