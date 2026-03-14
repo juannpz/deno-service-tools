@@ -1,5 +1,5 @@
 // src/server/middleware.ts
-import type { Context } from "../../deps.ts";
+import type { Context } from '../../deps.ts';
 import type { MiddlewareFunctionResponse } from './types.ts';
 
 export function errorHandler(): MiddlewareFunctionResponse {
@@ -10,7 +10,9 @@ export function errorHandler(): MiddlewareFunctionResponse {
             console.error(err);
             return c.json({
                 success: false,
-                message: err instanceof Error ? err.message : "Internal Server Error",
+                message: err instanceof Error
+                    ? err.message
+                    : 'Internal Server Error',
             }, 500);
         }
     };
@@ -18,19 +20,22 @@ export function errorHandler(): MiddlewareFunctionResponse {
 
 export function requestValidator(_schema: unknown): MiddlewareFunctionResponse {
     return async (c: Context, next: () => Promise<void>) => {
-        if (c.req.method === "POST" || c.req.method === "PUT" || c.req.method === "PATCH") {
+        if (
+            c.req.method === 'POST' || c.req.method === 'PUT' ||
+            c.req.method === 'PATCH'
+        ) {
             try {
                 const body = await c.req.json();
-                if (typeof body !== "object" || body === null) {
+                if (typeof body !== 'object' || body === null) {
                     return c.json({
                         success: false,
-                        message: "Invalid request body"
+                        message: 'Invalid request body',
                     }, 400);
                 }
             } catch (_e) {
                 return c.json({
                     success: false,
-                    message: "Invalid JSON in request body"
+                    message: 'Invalid JSON in request body',
                 }, 400);
             }
         }
@@ -51,10 +56,12 @@ export function requestTimeout(ms: number): MiddlewareFunctionResponse {
         try {
             await Promise.race([next(), timeoutPromise]);
         } catch (err) {
-            if (err instanceof Error && err.message.includes("Request timeout")) {
+            if (
+                err instanceof Error && err.message.includes('Request timeout')
+            ) {
                 return c.json({
                     success: false,
-                    message: "Request timed out"
+                    message: 'Request timed out',
                 }, 408);
             }
             throw err;

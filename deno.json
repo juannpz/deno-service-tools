@@ -1,7 +1,7 @@
 {
     "name": "@juannpz/deno-service-tools",
     "description": "A Deno library for building backend services & servers with Hono, offering strongly-typed route parameters, custom and pre-configured middleware, route grouping, and parameter validation.",
-    "version": "0.5.7-3",
+    "version": "0.5.8-6",
     "license": "MIT",
     "author": "juannpz <juannpz@proton.me>",
     "repository": {
@@ -33,17 +33,23 @@
             "src/",
             "tests/",
             "mod.ts",
-            "deps.ts"
+            "deps.ts",
+            "deno.json"
         ],
-        "indentWidth": 2,
-        "singleQuote": true
+        "indentWidth": 4,
+        "singleQuote": true,
+        "lineWidth": 80
     },
     "lint": {
+        "rules": {
+            "tags": ["recommended"]
+        },
         "include": [
             "src/",
             "tests/",
             "mod.ts",
-            "deps.ts"
+            "deps.ts",
+            "deno.json"
         ],
         "exclude": [
             "vendor_imports.ts"

@@ -1,17 +1,23 @@
-import { Hono, cors, logger } from "../../deps.ts";
+import { cors, Hono, logger } from '../../deps.ts';
 import type { Route } from './index.ts';
-import type { ContextVariables, ServerConfig } from "./types.ts";
+import type { ContextVariables, ServerConfig } from './types.ts';
 
 export class ServerBuilder<V extends ContextVariables = ContextVariables> {
     private app: Hono<{ Variables: V }>;
     private config: ServerConfig;
-    private routes: Route<Record<string, unknown>, Record<string, unknown>, Record<string, unknown>, Record<string, unknown>, V>[] = [];
+    private routes: Route<
+        Record<string, unknown>,
+        Record<string, unknown>,
+        Record<string, unknown>,
+        Record<string, unknown>,
+        V
+    >[] = [];
 
     constructor(config: Partial<ServerConfig> = {}) {
         this.app = new Hono<{ Variables: V }>();
         this.config = {
             port: config.port || 3000,
-            hostname: config.hostname || "0.0.0.0",
+            hostname: config.hostname || '0.0.0.0',
             cors: config.cors || false,
             logger: config.logger ?? true,
             ...config,
@@ -30,13 +36,24 @@ export class ServerBuilder<V extends ContextVariables = ContextVariables> {
         }
     }
 
-    public addRoute(route: Route<Record<string, unknown>, Record<string, unknown>, Record<string, unknown>, Record<string, unknown>, V>): this {
+    public addRoute(
+        route: Route<
+            Record<string, unknown>,
+            Record<string, unknown>,
+            Record<string, unknown>,
+            Record<string, unknown>,
+            V
+        >,
+    ): this {
         this.routes.push(route);
         route.register(this.app);
         return this;
     }
 
-    public group(path: string, routeBuilder: (app: Hono<{ Variables: V }>) => void): this {
+    public group(
+        path: string,
+        routeBuilder: (app: Hono<{ Variables: V }>) => void,
+    ): this {
         const subApp = new Hono<{ Variables: V }>();
         routeBuilder(subApp);
         this.app.route(path, subApp);
@@ -53,7 +70,9 @@ export class ServerBuilder<V extends ContextVariables = ContextVariables> {
     }
 
     public start() {
-        console.log(`Server starting on http://${this.config.hostname}:${this.config.port}`);
+        console.log(
+            `Server starting on http://${this.config.hostname}:${this.config.port}`,
+        );
 
         Deno.serve({
             handler: this.app.fetch,
@@ -63,6 +82,8 @@ export class ServerBuilder<V extends ContextVariables = ContextVariables> {
     }
 }
 
-export function createServer<V extends ContextVariables = ContextVariables>(config?: Partial<ServerConfig>): ServerBuilder<V> {
+export function createServer<V extends ContextVariables = ContextVariables>(
+    config?: Partial<ServerConfig>,
+): ServerBuilder<V> {
     return new ServerBuilder<V>(config);
 }

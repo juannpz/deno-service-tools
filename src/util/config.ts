@@ -6,14 +6,18 @@ export function checkEnv<T>(config: T): T {
 
         if (group) {
             Object.entries(group).forEach(([key, value]) => {
-                if (!value)
+                if (!value) {
                     missingKeys.push(key);
+                }
             });
         }
     }
 
-    if (missingKeys.length > 0)
-        throw new Error(`Missing required environment variables: ${missingKeys.join(', ')}`);
+    if (missingKeys.length > 0) {
+        throw new Error(
+            `Missing required environment variables: ${missingKeys.join(', ')}`,
+        );
+    }
 
     return config;
 }
