@@ -159,3 +159,26 @@ export function buildRequestResponse<T>(
         extra,
     };
 }
+
+/**
+ * Builds a URL by dynamically injecting query parameters.
+ * Automatically filters out `undefined` or `null` values, but preserves
+ * booleans (`false`) and numeric values (`0`).
+ * * @param baseUrl The base URL (e.g., "http://api.local/v1/crud/product").
+ * @param params An object containing the parameters (e.g., { is_active: false, name: "Coca" }).
+ * @returns A URL instance ready to be used with .toString().
+ */
+export function buildTargetUrl(
+    baseUrl: string,
+    params: Record<string, unknown> = {},
+): URL {
+    const url = new URL(baseUrl);
+
+    for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== null) {
+            url.searchParams.append(key, String(value));
+        }
+    }
+
+    return url;
+}

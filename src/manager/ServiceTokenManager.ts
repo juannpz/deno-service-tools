@@ -1,11 +1,11 @@
 import { safeFetch } from '../index.ts';
-import { buildRequestResponse } from '../util/request.util.ts';
 import { type Result, ResUtil } from '../util/result.util.ts';
 import { JWTManager } from './JWTManager.ts';
 
 interface ServiceAuthConfig {
     userId: string;
     role: string;
+    publicKey: string;
 }
 
 /**
@@ -122,14 +122,18 @@ export class ServiceTokenManager {
     ): Promise<Result<string>> {
         try {
             const createSessionResult = await safeFetch<{ jwt: string }>(
-                fetch(`${this.sessionServiceEntrypoint}/create?format=object`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        user_id: authConfig.userId,
-                        role: authConfig.role,
-                    }),
-                }),
+                fetch(
+                    `${this.sessionServiceEntrypoint}/v1/session/service/create`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            user_id: authConfig.userId,
+                            role: authConfig.role,
+                            public_key: authConfig.publicKey,
+                        }),
+                    },
+                ),
             );
 
             if (!createSessionResult.ok) {
