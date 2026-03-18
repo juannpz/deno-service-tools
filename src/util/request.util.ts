@@ -19,6 +19,23 @@ export type FailureApiResponse = {
 
 export type ApiResponse<T> = SuccessApiResponse<T> | FailureApiResponse;
 
+// --- Custom Errors ---
+
+/**
+ * Encapsula un error HTTP manteniendo el código de estado y el cuerpo parseado.
+ * Permite propagar errores HTTP a través de la capa Result sin perder contexto.
+ */
+export class HttpFetchError extends Error {
+    constructor(
+        public status: number,
+        public statusText: string,
+        public details: unknown,
+    ) {
+        super(`HTTP Error ${status}: ${statusText}`);
+        this.name = 'HttpFetchError';
+    }
+}
+
 // --- Function #1: Execute the request and return a `Result` ---
 
 export async function safeFetch<T>(
@@ -29,44 +46,39 @@ export async function safeFetch<T>(
 
         if (!response.ok) {
             let errorMessage = `Request failed with status ${response.status}`;
-            // Mantenemos el response por defecto para que el Case 1 siga funcionando si no hay JSON
             let errorDetails: unknown = response;
 
             try {
                 const clonedResponse = response.clone();
-                const errorBody = await clonedResponse.json() as Record<
-                    string,
-                    unknown
-                >;
+                const errorBody = await clonedResponse.json() as Record<string, unknown>;
 
                 if (errorBody && typeof errorBody === 'object') {
-                    // Rescatamos el mensaje
                     if (typeof errorBody.error === 'string') {
                         errorMessage = errorBody.error;
                     } else if (typeof errorBody.message === 'string') {
                         errorMessage = errorBody.message;
                     }
 
-                    // ¡EL CAMBIO CLAVE! Rescatamos el detalle JSON del otro microservicio o API externa
                     if (errorBody.detail !== undefined) {
                         errorDetails = errorBody.detail;
-                    } else if (
-                        errorBody.error !== undefined &&
-                        typeof errorBody.error !== 'string'
-                    ) {
+                    } else if (errorBody.error !== undefined && typeof errorBody.error !== 'string') {
                         errorDetails = errorBody.error;
                     } else {
                         errorDetails = errorBody;
                     }
                 }
             } catch (_) {
-                // ignored.
+                // ignored. errorDetails se mantiene como el Response original.
             }
 
-            // Enviamos el detalle extraído, ya no forzamos el objeto Response crudo
-            return ResUtil.Fail(errorMessage, errorDetails);
+            // ENVOLVEMOS EL RESULTADO EN NUESTRA CLASE HTTP
+            return ResUtil.Fail(
+                errorMessage,
+                new HttpFetchError(response.status, response.statusText, errorDetails)
+            );
         }
 
+        // ... (el código de éxito sigue intacto)
         try {
             const data = await response.json() as T;
             return ResUtil.Succeed(data);
@@ -74,10 +86,7 @@ export async function safeFetch<T>(
             return ResUtil.Fail('Failed to parse JSON response', parsingError);
         }
     } catch (networkError) {
-        return ResUtil.Fail(
-            'A network or unexpected error occurred',
-            networkError,
-        );
+        return ResUtil.Fail('A network or unexpected error occurred', networkError);
     }
 }
 
@@ -118,7 +127,20 @@ export function buildRequestResponse<T>(
 
     const { message, error } = result;
 
-    // Case 1: The error is a `Response` object from a failed fetch (e.g., 404, sin JSON body).
+    // Case 1: The error is our custom HttpFetchError (Mantiene el código HTTP real)
+    if (error instanceof HttpFetchError) {
+        return {
+            success: false,
+            message,
+            detail: typeof error.details === 'string' 
+                ? error.details 
+                : (error.details instanceof Response ? error.details.statusText : JSON.stringify(error.details)),
+            code: error.status as ContentfulStatusCode,
+            extra,
+        };
+    }
+
+    // Case 2: The error is a raw `Response` object (Fallback de seguridad)
     if (error instanceof Response) {
         return {
             success: false,
@@ -129,7 +151,7 @@ export function buildRequestResponse<T>(
         };
     }
 
-    // Case 2: The error is a standard `Error` instance.
+    // Case 3: The error is a standard `Error` instance (Errores de ejecución)
     if (error instanceof Error) {
         return {
             success: false,
@@ -140,7 +162,7 @@ export function buildRequestResponse<T>(
         };
     }
 
-    // Case 3: The error is a parsed plain object/string from another microservice
+    // Case 4: The error is a parsed plain object/string from unknown source
     if (error) {
         return {
             success: false,
@@ -151,7 +173,7 @@ export function buildRequestResponse<T>(
         };
     }
 
-    // Case 4: Unknown error.
+    // Case 5: Unknown error.
     return {
         success: false,
         message,
@@ -159,7 +181,6 @@ export function buildRequestResponse<T>(
         extra,
     };
 }
-
 /**
  * Builds a URL by dynamically injecting query parameters.
  * Automatically filters out `undefined` or `null` values, but preserves
