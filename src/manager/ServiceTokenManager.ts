@@ -4,6 +4,7 @@ import { JWTManager } from './JWTManager.ts';
 
 interface ServiceAuthConfig {
     userId: string;
+	tenantId: string;
     role: string;
     publicKey: string;
 }
@@ -129,6 +130,7 @@ export class ServiceTokenManager {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             user_id: authConfig.userId,
+							tenant_id: authConfig.tenantId,
                             role: authConfig.role,
                             public_key: authConfig.publicKey,
                         }),
