@@ -24,9 +24,7 @@
  * // Throws if any env var is missing
  * ```
  */
-export function checkEnv<T extends Record<string, Record<string, unknown>>>(
-    config: T,
-): T {
+export function checkEnv<T>(config: T): T {
     const missingKeys: string[] = [];
 
     for (const groupKey in config) {
