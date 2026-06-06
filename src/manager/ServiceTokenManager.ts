@@ -1,53 +1,110 @@
-import { safeFetch } from '../index.ts';
+import { safeFetch } from '../util/request.util.ts';
 import { type Result, ResUtil } from '../util/result.util.ts';
 import { JWTManager } from './JWTManager.ts';
+import { BaseManager } from './BaseManager.ts';
 
+/**
+ * Configuration required for inter-service authentication.
+ */
 interface ServiceAuthConfig {
+    /** Unique identifier for the service user. */
     userId: string;
-	tenantId: string;
+    /** Tenant identifier for multi-tenant environments. */
+    tenantId: string;
+    /** Role to request in the session token. */
     role: string;
+    /** Public key of the service (used by the session service for identification). */
     publicKey: string;
 }
 
 /**
- * Provider class for managing and caching inter-service authentication tokens.
- * It uses Deno KV in memory mode to temporarily store tokens and automatically
- * handles cache invalidation and token refresh based on the JWT 'exp' claim.
+ * Manager for caching and refreshing inter-service authentication tokens.
+ *
+ * Uses **Deno KV in in-memory mode** to cache JWT service tokens with automatic
+ * expiration based on the token's `exp` claim. When a cached token expires or
+ * does not exist, it transparently requests a new one from the session service.
+ *
+ * **Important:** Call `ServiceTokenManager.init(authConfig, entrypoint)` once
+ * at application startup before calling `getValidToken()`.
+ *
+ * @example
+ * ```ts
+ * await ServiceTokenManager.init(
+ *     { userId: 'svc-1', tenantId: 'tenant-a', role: 'admin', publicKey: '...' },
+ *     'https://auth.internal',
+ * );
+ *
+ * const result = await ServiceTokenManager.getValidToken();
+ * if (result.ok) {
+ *     headers.set('Authorization', `Bearer ${result.value}`);
+ * }
+ * ```
  */
-export class ServiceTokenManager {
+export class ServiceTokenManager extends BaseManager {
     private static kv: Deno.Kv;
     private static sessionServiceEntrypoint: string | null = null;
     private static authConfig: ServiceAuthConfig;
 
+    private constructor() {
+        super();
+    }
+
     /**
-     * Initializes the Deno KV store in strictly in-memory mode and sets the session service URL.
-     * MUST be called once at application startup.
+     * Initializes the Deno KV store (in-memory) and sets the session service URL
+     * and authentication configuration.
      *
-     * @param {ServiceAuthConfig} authConfig - The service user id and role.
-     * @param {string} sessionServiceEntrypoint - The base URL of the session service.
-     * @returns {Promise<void>}
+     * @param authConfig - The service user credentials and role.
+     * @param sessionServiceEntrypoint - The base URL of the session service
+     *   (e.g. `'https://auth.internal'`).
+     *
+     * @example
+     * ```ts
+     * await ServiceTokenManager.init(
+     *     {
+     *         userId: 'my-service',
+     *         tenantId: 'org-123',
+     *         role: 'admin',
+     *         publicKey: Deno.env.get('SERVICE_PUBLIC_KEY')!,
+     *     },
+     *     Deno.env.get('SESSION_SERVICE_URL')!,
+     * );
+     * ```
      */
     public static async init(
         authConfig: ServiceAuthConfig,
         sessionServiceEntrypoint: string,
     ): Promise<void> {
         this.sessionServiceEntrypoint = sessionServiceEntrypoint;
-
         this.authConfig = authConfig;
 
         if (!this.kv) {
             this.kv = await Deno.openKv(':memory:');
         }
+
+        BaseManager.markInitialized();
     }
 
     /**
-     * Retrieves an active service token from memory. If it does not exist or has expired,
-     * it transparently requests a new one from the session service.
+     * Retrieves an active service token from the cache or requests a new one.
      *
-     * @returns {Promise<Result<string>>} A Result containing the valid JWT string, or a failure message.
+     * - If a cached token exists and is not expired, returns it immediately.
+     * - If the cache is empty or expired, requests a new token from the session service,
+     *   caches it with a TTL derived from the JWT `exp` claim, and returns it.
+     *
+     * @returns A `Promise<Result<string>>` containing the valid JWT string,
+     *   or a failure message if the token could not be obtained.
+     *
+     * @example
+     * ```ts
+     * const tokenResult = await ServiceTokenManager.getValidToken();
+     * if (tokenResult.ok) {
+     *     const response = await fetch('https://api.internal/data', {
+     *         headers: { Authorization: `Bearer ${tokenResult.value}` }
+     *     });
+     * }
+     * ```
      */
     public static async getValidToken(): Promise<Result<string>> {
-        // Validación de seguridad para asegurar que el desarrollador llamó a init() primero
         if (!this.sessionServiceEntrypoint || !this.kv) {
             return ResUtil.Fail(
                 'ServiceTokenProvider is not initialized. Call init(entrypoint) at startup.',
@@ -64,7 +121,6 @@ export class ServiceTokenManager {
         try {
             const cachedToken = await this.kv.get<string>(tokenKey);
 
-            // Si Deno KV nos devuelve un valor, significa que NO ha expirado (gracias al TTL)
             if (cachedToken.value) {
                 return ResUtil.Succeed(cachedToken.value);
             }
@@ -72,7 +128,6 @@ export class ServiceTokenManager {
             console.error('Failed to read token from Deno KV cache', error);
         }
 
-        // Si llegamos aquí, el token expiró (KV lo borró) o nunca existió. Pedimos uno nuevo.
         const newTokenResult = await this.requestNewToken(this.authConfig);
 
         if (!newTokenResult.ok) {
@@ -87,7 +142,6 @@ export class ServiceTokenManager {
 
         if (!decodeResult.ok) {
             console.error(`ServiceTokenManager: ${decodeResult.message}`);
-            // Si no podemos leerlo, devolvemos el token sin cachear para no romper el flujo
             return ResUtil.Succeed(newToken);
         }
 
@@ -116,7 +170,10 @@ export class ServiceTokenManager {
     }
 
     /**
-     * Internal logic to fetch a new token from the session-service.
+     * Requests a new service token from the session service.
+     *
+     * @param authConfig - The authentication configuration for the service.
+     * @returns A `Promise<Result<string>>` containing the JWT string or an error.
      */
     private static async requestNewToken(
         authConfig: ServiceAuthConfig,
@@ -130,7 +187,7 @@ export class ServiceTokenManager {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             user_id: authConfig.userId,
-							tenant_id: authConfig.tenantId,
+                            tenant_id: authConfig.tenantId,
                             role: authConfig.role,
                             public_key: authConfig.publicKey,
                         }),
@@ -140,7 +197,6 @@ export class ServiceTokenManager {
 
             if (!createSessionResult.ok) {
                 console.error(createSessionResult.message);
-
                 return createSessionResult;
             }
 

@@ -21,7 +21,8 @@ await build({
             url: "https://github.com/tu-usuario/deno-service-tools/issues",
         },
         dependencies: {
-            "hono": "^4.3.1"
+            "hono": "^4.3.1",
+            "jose": "^6.0.0"
         },
         devDependencies: {}
     },

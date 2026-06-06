@@ -1,7 +1,19 @@
-// src/server/middleware.ts
 import type { Context } from '../../deps.ts';
 import type { MiddlewareFunctionResponse } from './types.ts';
 
+/**
+ * Global error handler middleware.
+ *
+ * Catches unhandled errors thrown by downstream handlers or middleware,
+ * logs them to the console, and returns a JSON error response with status 500.
+ *
+ * @returns A middleware function that wraps the next handler in a try/catch.
+ *
+ * @example
+ * ```ts
+ * server.middleware(errorHandler());
+ * ```
+ */
 export function errorHandler(): MiddlewareFunctionResponse {
     return async (c: Context, next: () => Promise<void>) => {
         try {
@@ -18,7 +30,28 @@ export function errorHandler(): MiddlewareFunctionResponse {
     };
 }
 
-export function requestValidator(_schema: unknown): MiddlewareFunctionResponse {
+/**
+ * Request body validation middleware.
+ *
+ * Validates that POST, PUT, and PATCH requests contain a valid JSON body.
+ * If the body is not parseable as JSON or is not a non-null object,
+ * returns a 400 error response.
+ *
+ * **Note:** The `schema` parameter is reserved for future integration with
+ * runtime validation libraries (e.g., Zod). Currently, only structural JSON
+ * validity is checked.
+ *
+ * @param _schema - Reserved for future schema-based validation.
+ * @returns A middleware function that validates the request body.
+ *
+ * @example
+ * ```ts
+ * server.middleware(requestValidator());
+ * ```
+ */
+export function requestValidator(
+    _schema?: unknown,
+): MiddlewareFunctionResponse {
     return async (c: Context, next: () => Promise<void>) => {
         if (
             c.req.method === 'POST' || c.req.method === 'PUT' ||
@@ -43,9 +76,23 @@ export function requestValidator(_schema: unknown): MiddlewareFunctionResponse {
     };
 }
 
+/**
+ * Request timeout middleware.
+ *
+ * Rejects requests that take longer than `ms` milliseconds to process,
+ * returning a 408 Request Timeout JSON response.
+ *
+ * @param ms - Maximum request duration in milliseconds.
+ * @returns A middleware function that enforces the timeout.
+ *
+ * @example
+ * ```ts
+ * server.middleware(requestTimeout(5000));
+ * ```
+ */
 export function requestTimeout(ms: number): MiddlewareFunctionResponse {
     return async (c: Context, next: () => Promise<void>) => {
-        let timeoutId: number = 0;
+        let timeoutId: ReturnType<typeof setTimeout> | undefined = undefined;
 
         const timeoutPromise = new Promise<never>((_, reject) => {
             timeoutId = setTimeout(() => {
