@@ -1,6 +1,7 @@
 import { cors, Hono, logger } from '../../deps.ts';
 import type { Route } from './index.ts';
 import type { ContextVariables, ServerConfig } from './types.ts';
+import { requestTimeout } from './middleware.ts';
 
 /**
  * High-level HTTP server builder that wraps a Hono application.
@@ -37,6 +38,7 @@ export class ServerBuilder<V extends ContextVariables = ContextVariables> {
      *   - `hostname`: `'0.0.0.0'`
      *   - `cors`: `false`
      *   - `logger`: `true`
+     *   - `requestTimeout`: not set (no timeout)
      */
     constructor(config: Partial<ServerConfig> = {}) {
         this.app = new Hono<{ Variables: V }>();
@@ -61,6 +63,10 @@ export class ServerBuilder<V extends ContextVariables = ContextVariables> {
 
         if (this.config.cors) {
             this.app.use(cors());
+        }
+
+        if (this.config.requestTimeout) {
+            this.app.use(requestTimeout(this.config.requestTimeout));
         }
     }
 
