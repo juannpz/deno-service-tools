@@ -2,18 +2,18 @@
  * Validates that all required environment configuration values are present.
  *
  * Iterates over the top-level groups of a configuration object and checks
- * that every nested value is truthy. If any value is falsy (empty string,
- * `undefined`, `null`, `0`, `false`), throws an error listing all missing keys.
+ * that every nested value is present. A value is considered missing when it
+ * is falsy — with one exception: a **boolean `false`** is a legitimate value
+ * (e.g. `MINIO_USE_SSL=false`), so it does NOT count as missing.
  *
- * **Note:** This function treats `0` and `false` as falsy, which may not be
- * desirable for all configs. Use it for string-based environment configs
- * (e.g., `{ DB: { host: 'localhost' } }`) where falsy indicates a missing value.
+ * Missing (throws): `undefined`, `null`, `""`, `0`, `NaN`.
+ * Present (ok): any other value, including boolean `false`.
  *
  * @template T - The configuration object type. It should be a record of groups,
- *   each containing string or primitive values.
+ *   each containing string, number or boolean values.
  * @param config - The configuration object to validate.
  * @returns The same config object (unmodified) if all values are present.
- * @throws {Error} If any value in the config is falsy, with the list of missing keys.
+ * @throws {Error} If any value in the config is missing, with the list of missing keys.
  *
  * @example
  * ```ts
@@ -32,7 +32,7 @@ export function checkEnv<T>(config: T): T {
 
         if (group) {
             Object.entries(group).forEach(([key, value]) => {
-                if (!value) {
+                if (!value && typeof value !== 'boolean') {
                     missingKeys.push(key);
                 }
             });
