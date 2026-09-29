@@ -27,6 +27,12 @@ export type FailureApiResponse = {
     detail?: string;
     /** HTTP status code for the error. */
     code: ContentfulStatusCode;
+    /**
+     * Stable, machine-readable error code supplied by the `ErrResult`
+     * (e.g. `"FORBIDDEN"`, `"VALIDATION"`). Omitted when the result did not
+     * provide one, so existing responses are unchanged.
+     */
+    errorCode?: string;
     /** Optional extra metadata or context. */
     extra?: unknown;
 };
@@ -198,11 +204,16 @@ export function buildRequestResponse<T>(
  * This function introspects the error inside `ErrResult` and extracts
  * meaningful status codes and detail messages:
  *
+ * - `ErrResult.code` set → that HTTP status is used (explicit wins)
  * - `HttpFetchError` → uses the original HTTP status and detail
  * - `Response` → uses `response.status` and `response.statusText`
  * - `Error` → maps to status 500 with the error message
  * - String or object → maps to status 500 with stringified detail
  * - Unknown → maps to status 500 with no detail
+ *
+ * When `ErrResult.errorCode` is present it is surfaced as `errorCode` on the
+ * failure response, so clients can rely on a stable code instead of the
+ * human-readable `message`.
  *
  * @template T The data type for successful responses.
  * @param result - The `Result<T>` to convert.
@@ -228,56 +239,37 @@ export function buildRequestResponse<T>(
         };
     }
 
-    const { message, error } = result;
+    const { message, error, code, errorCode } = result;
+
+    // `detail` extraction only depends on `error` and is kept byte-for-byte
+    // identical to the previous behavior.
+    let detail: string | undefined;
+    let inferredCode: ContentfulStatusCode = 500;
 
     if (error instanceof HttpFetchError) {
-        return {
-            success: false,
-            message,
-            detail: typeof error.details === 'string'
-                ? error.details
-                : (error.details instanceof Response
-                    ? error.details.statusText
-                    : JSON.stringify(error.details)),
-            code: error.status as ContentfulStatusCode,
-            extra,
-        };
-    }
-
-    if (error instanceof Response) {
-        return {
-            success: false,
-            message,
-            detail: error.statusText,
-            code: error.status as ContentfulStatusCode,
-            extra,
-        };
-    }
-
-    if (error instanceof Error) {
-        return {
-            success: false,
-            message,
-            detail: error.message,
-            code: 500,
-            extra,
-        };
-    }
-
-    if (error) {
-        return {
-            success: false,
-            message,
-            detail: typeof error === 'string' ? error : JSON.stringify(error),
-            code: 500,
-            extra,
-        };
+        detail = typeof error.details === 'string'
+            ? error.details
+            : (error.details instanceof Response
+                ? error.details.statusText
+                : JSON.stringify(error.details));
+        inferredCode = error.status as ContentfulStatusCode;
+    } else if (error instanceof Response) {
+        detail = error.statusText;
+        inferredCode = error.status as ContentfulStatusCode;
+    } else if (error instanceof Error) {
+        detail = error.message;
+    } else if (error) {
+        detail = typeof error === 'string' ? error : JSON.stringify(error);
     }
 
     return {
         success: false,
         message,
-        code: 500,
+        ...(detail !== undefined ? { detail } : {}),
+        // An explicit `code` on the Result always wins; otherwise the legacy
+        // inference from `error` is preserved.
+        code: code ?? inferredCode,
+        ...(errorCode !== undefined ? { errorCode } : {}),
         extra,
     };
 }

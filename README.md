@@ -226,6 +226,39 @@ DatabaseManager.init(config);
 - `.rateLimit(options)` - Add rate limiting
 - `.authenticate(strategy)` - Add authentication
 
+### Result & Typed Errors
+
+`Result<T>` is `OkResult<T> | ErrResult`. Both an HTTP status and a stable,
+machine-readable error code can travel with a failure, so handlers do not need
+to parse messages to decide the response status:
+
+```typescript
+import { ResUtil, buildRequestResponse } from "@juannpz/deno-service-tools";
+
+// Legacy usage is unchanged.
+ResUtil.Fail("Something failed", error);
+
+// Attach an explicit HTTP status and a stable error code.
+ResUtil.Fail("User lacks permission", undefined, {
+  code: 403,
+  errorCode: "FORBIDDEN",
+});
+
+// Same, without an underlying error object.
+ResUtil.FailWith("The upstream rejected the request", {
+  code: 422,
+  errorCode: "UPSTREAM_REJECTED",
+});
+
+const response = buildRequestResponse(result);
+// → { success: false, message, detail?, code, errorCode?, extra? }
+```
+
+`buildRequestResponse` precedence for the status:
+`ErrResult.code` (explicit) → `HttpFetchError`/`Response` status → `500`.
+Everything else (including the absence of `code`/`errorCode`) keeps the exact
+previous behavior, so the change is backward compatible.
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please read our contributing guidelines and submit pull requests.

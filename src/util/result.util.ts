@@ -1,3 +1,5 @@
+import type { ContentfulStatusCode } from '../../deps.ts';
+
 /**
  * Represents a successful result of an operation.
  *
@@ -20,6 +22,31 @@ export interface ErrResult {
     message: string;
     /** The original error object or value, if available. Use for debugging/logging. */
     error?: unknown;
+    /**
+     * HTTP status to use when this failure is converted into an API response.
+     *
+     * When present, `buildRequestResponse` uses this value instead of inferring
+     * the status from `error`. When absent, the previous behavior is preserved
+     * (`HttpFetchError`/`Response` keep their status, anything else maps to 500).
+     */
+    code?: ContentfulStatusCode;
+    /**
+     * Stable, machine-readable error code (e.g. `"FORBIDDEN"`, `"VALIDATION"`).
+     *
+     * It is independent from `message`: clients can branch on a value that does
+     * not change when the human-readable text is reworded or translated.
+     */
+    errorCode?: string;
+}
+
+/**
+ * Options accepted by {@link ResUtil.Fail} and {@link ResUtil.FailWith}.
+ */
+export interface FailOptions {
+    /** HTTP status for the failure. */
+    code?: ContentfulStatusCode;
+    /** Stable, machine-readable error code. */
+    errorCode?: string;
 }
 
 /**
@@ -65,9 +92,40 @@ interface ResUtil {
      *
      * @param message A descriptive error message.
      * @param error The original captured error (optional, but recommended for debugging).
+     * @param options Optional HTTP status (`code`) and stable machine-readable
+     *   `errorCode`. Both are additive: omitting them preserves the legacy
+     *   behavior (`buildRequestResponse` infers the status from `error`).
      * @returns An `ErrResult` object with `ok: false` and the error details.
      */
-    Fail: (message: string, error?: unknown) => ErrResult;
+    Fail: (
+        message: string,
+        error?: unknown,
+        options?: FailOptions,
+    ) => ErrResult;
+
+    /**
+     * Convenience variant of {@link ResUtil.Fail} for the common case where no
+     * underlying `error` object exists but a specific status/`errorCode` must be
+     * attached to the failure.
+     *
+     * @param message A descriptive error message.
+     * @param options The HTTP status (`code`) and/or stable `errorCode`.
+     * @param error The original captured error (optional).
+     * @returns An `ErrResult` object with `ok: false`.
+     *
+     * @example
+     * ```ts
+     * return ResUtil.FailWith('User lacks permission', {
+     *     code: 403,
+     *     errorCode: 'FORBIDDEN',
+     * });
+     * ```
+     */
+    FailWith: (
+        message: string,
+        options: FailOptions,
+        error?: unknown,
+    ) => ErrResult;
 }
 
 /**
@@ -91,7 +149,20 @@ export const ResUtil: ResUtil = {
         return { ok: true, value };
     },
 
-    Fail(message: string, error?: unknown): ErrResult {
-        return { ok: false, message, error };
+    Fail(message: string, error?: unknown, options?: FailOptions): ErrResult {
+        const result: ErrResult = { ok: false, message, error };
+        if (options?.code !== undefined) result.code = options.code;
+        if (options?.errorCode !== undefined) {
+            result.errorCode = options.errorCode;
+        }
+        return result;
+    },
+
+    FailWith(
+        message: string,
+        options: FailOptions,
+        error?: unknown,
+    ): ErrResult {
+        return ResUtil.Fail(message, error, options);
     },
 };
