@@ -2,6 +2,7 @@ import { cors, Hono, logger } from '../../deps.ts';
 import type { Route } from './index.ts';
 import type { ContextVariables, ServerConfig } from './types.ts';
 import { requestTimeout } from './middleware.ts';
+import { normalizeCorsOptions } from './cors.util.ts';
 
 /**
  * High-level HTTP server builder that wraps a Hono application.
@@ -62,7 +63,7 @@ export class ServerBuilder<V extends ContextVariables = ContextVariables> {
         }
 
         if (this.config.cors) {
-            this.app.use(cors());
+            this.app.use(cors(normalizeCorsOptions(this.config.cors)));
         }
 
         if (this.config.requestTimeout) {
